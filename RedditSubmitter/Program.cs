@@ -24,7 +24,7 @@ namespace RedditSubmitter
             var password = lines[3];
 
             var rs = new RedditSubmitter(username, password, clientId, secret);
-            await rs.Authorize();
+            await rs.GetAccessToken();
         }
     }
 }

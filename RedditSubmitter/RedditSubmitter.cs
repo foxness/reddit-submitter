@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace RedditSubmitter
@@ -16,6 +17,9 @@ namespace RedditSubmitter
         private readonly string password;
         private readonly string clientId;
         private readonly string secret;
+
+        private string accessToken;
+        private DateTime? tokenExpires;
 
         private HttpClient client;
 
@@ -31,7 +35,7 @@ namespace RedditSubmitter
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
         }
 
-        public async Task Authorize()
+        public async Task GetAccessToken()
         {
             var response = await client.PostAsync(ACCESS_TOKEN_URL, new FormUrlEncodedContent(new Dictionary<string, string>
             {
@@ -42,12 +46,33 @@ namespace RedditSubmitter
 
             var responseString = await response.Content.ReadAsStringAsync();
 
-            /*if (response.IsSuccessStatusCode)
-            {
-                Console.WriteLine(response);
-            }*/
+            if (response.IsSuccessStatusCode)
+                (accessToken, tokenExpires) = ExtractToken(responseString);
+            else
+                throw new Exception(response.ToString());
+        }
 
-            Console.WriteLine(response);
+        private (string token, DateTime? expire) ExtractToken(string response)
+        {
+            /* {"access_token": "Booty", "token_type": "bearer", "expires_in": 3600, "scope": "*"} */
+
+            string token = null;
+            DateTime? expire = null;
+
+            var r = new Regex(@"""(?<k>\w+)"": ((?<v>\d+)|""(?<v>[^""]*)"")");
+            foreach (Match m in r.Matches(response))
+            {
+                switch (m.Groups["k"].Value)
+                {
+                    case "access_token": token = m.Groups["v"].Value; break;
+                    case "expires_in": expire = DateTime.Now.AddSeconds(Int32.Parse(m.Groups["v"].Value)); break;
+                }
+            }
+
+            if (token == null || expire == null)
+                throw new Exception("no token bois");
+
+            return (token, expire);
         }
     }
 }
