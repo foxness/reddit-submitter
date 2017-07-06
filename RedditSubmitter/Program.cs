@@ -24,7 +24,7 @@ namespace RedditSubmitter
             var password = lines[3];
 
             var rs = new RedditSubmitter(username, password, clientId, secret);
-            await rs.GetAccessToken();
+            rs.Post(PostKind.Image, true, true, "wallpapers", "Dreamer [1980x1080]", null, "https://wallpapers.wallhaven.cc/wallpapers/full/wallhaven-512644.png");
         }
     }
 }

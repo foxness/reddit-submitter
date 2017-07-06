@@ -9,9 +9,15 @@ using System.Threading.Tasks;
 
 namespace RedditSubmitter
 {
+    enum PostKind
+    {
+        Link, Self, Image, Video, Videogif
+    }
+
     class RedditSubmitter
     {
         private const string ACCESS_TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
+        private const string SUBMIT_URL = "https://oauth.reddit.com/api/submit";
 
         private readonly string username;
         private readonly string password;
@@ -21,6 +27,7 @@ namespace RedditSubmitter
         private string accessToken;
         private DateTime? tokenExpires;
 
+        private AuthenticationHeaderValue basicAuth;
         private HttpClient client;
 
         public RedditSubmitter(string username, string password, string clientId, string secret)
@@ -32,24 +39,66 @@ namespace RedditSubmitter
 
             client = new HttpClient();
             var byteArray = Encoding.ASCII.GetBytes($"{clientId}:{secret}");
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+            basicAuth = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+            client.DefaultRequestHeaders.Authorization = basicAuth;
+            client.DefaultRequestHeaders.Add("User-Agent", "reddit-submitter by foxneZz");
         }
 
-        public async Task GetAccessToken()
+        public void Post(PostKind pk, bool resubmit, bool sendReplies, string subreddit, string title, string text = null, string url = null)
         {
-            var response = await client.PostAsync(ACCESS_TOKEN_URL, new FormUrlEncodedContent(new Dictionary<string, string>
+            GetAccessToken();
+
+            var values = new Dictionary<string, string>
+            {
+                { "api_type", "json" },
+                { "kind", pk.ToString().ToLower() },
+                { "resubmit", resubmit.ToString().ToLower() },
+                { "sendreplies", sendReplies.ToString().ToLower() },
+                { "sr", subreddit.ToLower() },
+                { "title", title }
+            };
+
+            switch (pk)
+            {
+                case PostKind.Self:
+                    if (text == null)
+                        throw new Exception();
+
+                    values.Add("text", text);
+                    break;
+
+                default:
+                    if (url == null)
+                        throw new Exception();
+
+                    values.Add("url", url);
+                    break;
+            }
+
+            var response = client.PostAsync(SUBMIT_URL, new FormUrlEncodedContent(values)).Result;
+            var responseString = response.Content.ReadAsStringAsync().Result;
+
+            Console.WriteLine(responseString);
+        }
+
+        private void GetAccessToken()
+        {
+            var response = client.PostAsync(ACCESS_TOKEN_URL, new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 { "grant_type", "password" },
                 { "username", username },
                 { "password", password }
-            }));
+            })).Result;
 
-            var responseString = await response.Content.ReadAsStringAsync();
+            var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response.IsSuccessStatusCode)
+            {
                 (accessToken, tokenExpires) = ExtractToken(responseString);
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", accessToken);
+            }
             else
-                throw new Exception(response.ToString());
+                throw new Exception("Not successful");
         }
 
         private (string token, DateTime? expire) ExtractToken(string response)
